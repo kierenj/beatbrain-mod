@@ -1,0 +1,16 @@
+﻿{
+  "$schema": "https://raw.githubusercontent.com/nike4613/ModSaber-MetadataFileSchema/master/Schema.json",
+  "author": "Kieren Johnstone",
+  "description": [ "FlashCast - transmits various game events to FlashCast devices listening on the LAN" ],
+  "gameVersion": "1.3.0",
+  "id": "flash-cast",
+  "name": "FlashCast",
+  "version": "0.0.1-alpha",
+  "dependsOn": {},
+  "conflictsWith": {},
+  "features": [],
+  "links": {
+  	  "project-source": "https://github.com/kierenj/megademo",
+	  "project-home": "https://github.com/kierenj/megademo/wiki"
+  }
+}
