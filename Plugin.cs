@@ -1,4 +1,5 @@
-﻿using IPA;
+﻿using BS_Utils.Utilities;
+using IPA;
 using IPA.Config;
 using IPA.Utilities;
 using UnityEngine;
@@ -12,7 +13,7 @@ namespace BeatBrain.Mod
         internal static Ref<PluginConfig> config;
         internal static IConfigProvider configProvider;
 
-        public void Init(IPALogger logger, [Config.Prefer("json")] IConfigProvider cfgProvider)
+        public void Init(IPALogger logger, [IPA.Config.Config.Prefer("json")] IConfigProvider cfgProvider)
         {
             Logger.log = logger;
             configProvider = cfgProvider;
@@ -27,6 +28,8 @@ namespace BeatBrain.Mod
 
         public void OnApplicationStart()
         {
+            BSEvents.OnLoad();
+            BSEvents.menuSceneLoadedFresh += BSEvents_menuSceneLoadedFresh;
         }
 
         public void OnApplicationQuit()
@@ -35,11 +38,15 @@ namespace BeatBrain.Mod
 
         public void OnFixedUpdate()
         {
-
         }
 
         public void OnUpdate()
         {
+        }
+
+        private void BSEvents_menuSceneLoadedFresh()
+        {
+            var _ = new GameObject("BeatBrain Disclaimer").AddComponent<Disclaimer>();
         }
 
         public void OnActiveSceneChanged(Scene prevScene, Scene nextScene)
@@ -53,12 +60,10 @@ namespace BeatBrain.Mod
 
         public void OnSceneLoaded(Scene scene, LoadSceneMode sceneMode)
         {
-
         }
 
         public void OnSceneUnloaded(Scene scene)
         {
-
         }
     }   
 }

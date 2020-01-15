@@ -1,11 +1,13 @@
-﻿using System;
-using System.Collections;
+﻿using System.Collections;
 using System.Linq;
 using UnityEngine;
-using UnityEngine.XR;
 
 namespace BeatBrain.Mod
 {
+    /// <summary>
+    /// Looks for devices on the LAN which want to listen for note-hit events,
+    /// sends packets to them when those events happen: game part.
+    /// </summary>
     public class FlashCaster : MonoBehaviour
     {
         private ScoreController sc;

@@ -1,0 +1,14 @@
+<bg>
+  <vertical child-control-height='false'>
+    <horizontal bg='panel-top' pad-left='15' pad-right='15' horizontal-fit='PreferredSize'>
+      <text text='BeatBrain' align='Center' font-size='8'/>
+    </horizontal>
+  </vertical>
+  
+  <text-page anchor-min-x='0' anchor-min-y='0.15' anchor-max-x='1' anchor-max-y='0.85' text='~maintext'/>
+  
+  <bottom-button-panel>
+    <button text='Agree' on-click='agree'></button>
+    <button text='Cancel' on-click='cancel'></button>
+  </bottom-button-panel>
+</bg>

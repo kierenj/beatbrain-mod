@@ -8,6 +8,10 @@ using System.Linq;
 
 namespace BeatBrain.Mod
 {
+    /// <summary>
+    /// Looks for devices on the LAN which want to listen for note-hit events,
+    /// sends packets to them when those events happen: netcode part.
+    /// </summary>
     public class FlashCast : IDisposable
     {
         private static readonly IPAddress CastAddress = IPAddress.Parse("226.1.1.1");
