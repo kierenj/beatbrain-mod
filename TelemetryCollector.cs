@@ -7,6 +7,9 @@ using UnityEngine.XR;
 using System.Threading;
 using System.Linq;
 using System;
+using System.Net.WebSockets;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace BeatBrain.Mod
 {
@@ -17,8 +20,6 @@ namespace BeatBrain.Mod
     public class TelemetryCollector : MonoBehaviour
     {
         private Stopwatch _timer;
-        private MemoryStream _ms;
-        private BinaryWriter _writer;
         private ScoreController _scoreController;
         private int _leftHitDelta;
         private int _rightHitDelta;
@@ -27,6 +28,16 @@ namespace BeatBrain.Mod
         private int? _rawScore;
         private int? _modifiedScore;
         private VRCenterAdjust _vrca;
+        private ClientWebSocket _ws;
+
+        private readonly object _sync = new object();
+        private readonly CancellationTokenSource _wsCancelSrc = new CancellationTokenSource();
+        private readonly AutoResetEvent _newData = new AutoResetEvent(false);
+        private CancellationToken _wsCancel;
+        private int _sendPos;
+        private int? _finalPos;
+        private MemoryStream _ms;
+        private BinaryWriter _writer;
 
 #if DEBUG_TEXT
         private TextMeshPro _text;
@@ -80,9 +91,51 @@ namespace BeatBrain.Mod
             go.transform.localPosition = new Vector3(0, 2.3f, 7f);
             _text.ForceMeshUpdate();
 #endif
+            _wsCancel = _wsCancelSrc.Token;
 
-            _ms = new MemoryStream(1024 * 1024 * 2); // 2mb should be plenty in most cases, but this can auto expand
+            _ms = new MemoryStream(1024 * 1024 * 4); // 4mb should be plenty in most cases, but this can auto expand
             _writer = new BinaryWriter(_ms);
+
+            DateTime lastPosLog = DateTime.UtcNow;
+            Task.Run(async () =>
+            {
+                try
+                {
+                    ArraySegment<byte> seg = default;
+                    int toWrite;
+
+                    _ws = new ClientWebSocket();
+                    var uri = new Uri("wss://beatbrain-api.brainbazooka.com/ws?action=upload-telemetry");
+                    await _ws.ConnectAsync(uri, _wsCancel);
+                    while (_finalPos == null && !(_sendPos >= _finalPos))
+                    {
+                        _newData.WaitOne(5);
+                        _wsCancel.ThrowIfCancellationRequested();
+                        lock (_ms)
+                        {
+                            if ((DateTime.UtcNow - lastPosLog).TotalSeconds > 10.0)
+                            {
+                                lastPosLog = DateTime.UtcNow;
+                            }
+                            toWrite = (int)Math.Min(_ms.Position - _sendPos, 32768);
+                            if (toWrite > 0)
+                            {
+                                seg = new ArraySegment<byte>(_ms.GetBuffer(), _sendPos, toWrite);
+                            }
+                        }
+                        if (toWrite > 0)
+                        {
+                            await _ws.SendAsync(seg, WebSocketMessageType.Binary, false, _wsCancel);
+                            _sendPos += toWrite;
+                        }
+                    }
+                    await _ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
+                }
+                catch (Exception ex)
+                {
+                    Logger.log.Error(ex);
+                }
+            });
 
             var setup = BS_Utils.Plugin.LevelData.GameplayCoreSceneSetupData;
             var dbm = setup.difficultyBeatmap;
@@ -133,21 +186,28 @@ namespace BeatBrain.Mod
             _scoreController.noteWasMissedEvent -= NoteMissed;
 
             _writer.Flush();
+            _finalPos = (int)_writer.BaseStream.Position;
+
             _writer = null;
 
             // start a lower-priority background thread to upload the data in one go
-            var uploadThread = new Thread(new ThreadStart(() =>
+            if (_sendPos == 0)
             {
-                var c = new WebClient();
-                c.Headers[HttpRequestHeader.ContentType] = "application/x-beat-brain";
-                c.UploadData("https://beatbrain-api.brainbazooka.com/v1/telemetry", _ms.ToArray());
-            }))
-            {
-                Name = "BeatBrain data uploader",
-                IsBackground = true,
-                Priority = System.Threading.ThreadPriority.BelowNormal
-            };
-            uploadThread.Start();
+                Logger.log.Debug("SendPos is zero: uploading telemetry the old-fashioned way");
+                _wsCancelSrc.Cancel();
+                var uploadThread = new Thread(new ThreadStart(() =>
+                {
+                    var c = new WebClient();
+                    c.Headers[HttpRequestHeader.ContentType] = "application/x-beat-brain";
+                    c.UploadData("https://beatbrain-api.brainbazooka.com/v1/telemetry", _ms.ToArray());
+                }))
+                {
+                    Name = "BeatBrain data uploader",
+                    IsBackground = true,
+                    Priority = System.Threading.ThreadPriority.BelowNormal
+                };
+                uploadThread.Start();
+            }
         }
 
 #if DEBUG_TEXT
@@ -158,55 +218,60 @@ namespace BeatBrain.Mod
         {
             if (_writer == null) return;
 
-            // every frame, write to the buffer...
-            _writer.Write(_timer.ElapsedTicks);
+            lock (_ms)
+            {
+                // every frame, write to the buffer...
+                _writer.Write(_timer.ElapsedTicks);
 
-            // write flags to say whats included in the frame
-            var content = TelemetryFrameContents.AbsoluteMovement;
-            if (_rawScore != null && _modifiedScore != null) content |= TelemetryFrameContents.AbsoluteScore;
-            if (_leftHitDelta > 0) content |= TelemetryFrameContents.LeftHitDelta;
-            if (_leftMissDelta > 0) content |= TelemetryFrameContents.LeftMissDelta;
-            if (_rightHitDelta > 0) content |= TelemetryFrameContents.RightHitDelta;
-            if (_rightMissDelta > 0) content |= TelemetryFrameContents.RightMissDelta;
-            _writer.Write((byte)content);
+                // write flags to say whats included in the frame
+                var content = TelemetryFrameContents.AbsoluteMovement;
+                if (_rawScore != null && _modifiedScore != null) content |= TelemetryFrameContents.AbsoluteScore;
+                if (_leftHitDelta > 0) content |= TelemetryFrameContents.LeftHitDelta;
+                if (_leftMissDelta > 0) content |= TelemetryFrameContents.LeftMissDelta;
+                if (_rightHitDelta > 0) content |= TelemetryFrameContents.RightHitDelta;
+                if (_rightMissDelta > 0) content |= TelemetryFrameContents.RightMissDelta;
+                _writer.Write((byte)content);
 
-            // write frame contents: might be movement, might be note events, could be a score change
-            if (content.HasFlag(TelemetryFrameContents.AbsoluteMovement))
-            {
-                Write(_vrca.transform.TransformPoint(InputTracking.GetLocalPosition(XRNode.Head)));
-                Write(_vrca.transform.TransformPoint(InputTracking.GetLocalPosition(XRNode.LeftHand)));
-                Write(_vrca.transform.TransformPoint(InputTracking.GetLocalPosition(XRNode.RightHand)));
-                Write(InputTracking.GetLocalRotation(XRNode.Head) * _vrca.transform.rotation);
-                Write(InputTracking.GetLocalRotation(XRNode.LeftHand) * _vrca.transform.rotation);
-                Write(InputTracking.GetLocalRotation(XRNode.RightHand) * _vrca.transform.rotation);
-            }
-            if (content.HasFlag(TelemetryFrameContents.AbsoluteScore))
-            {
-                _writer.Write(_rawScore.Value);
-                _writer.Write(_modifiedScore.Value);
-                _rawScore = _modifiedScore = null;
-            }
-            if (content.HasFlag(TelemetryFrameContents.LeftHitDelta))
-            {
-                _writer.Write((byte)_leftHitDelta);
-                _leftHitDelta = 0;
-            }
-            if (content.HasFlag(TelemetryFrameContents.RightHitDelta))
-            {
-                _writer.Write((byte)_rightHitDelta);
-                _rightHitDelta = 0;
-            }
-            if (content.HasFlag(TelemetryFrameContents.LeftMissDelta))
-            {
-                _writer.Write((byte)_leftMissDelta);
-                _leftMissDelta = 0;
-            }
-            if (content.HasFlag(TelemetryFrameContents.RightMissDelta))
-            {
-                _writer.Write((byte)_rightMissDelta);
-                _rightMissDelta = 0;
+                // write frame contents: might be movement, might be note events, could be a score change
+                if (content.HasFlag(TelemetryFrameContents.AbsoluteMovement))
+                {
+                    Write(_vrca.transform.TransformPoint(InputTracking.GetLocalPosition(XRNode.Head)));
+                    Write(_vrca.transform.TransformPoint(InputTracking.GetLocalPosition(XRNode.LeftHand)));
+                    Write(_vrca.transform.TransformPoint(InputTracking.GetLocalPosition(XRNode.RightHand)));
+                    Write(InputTracking.GetLocalRotation(XRNode.Head) * _vrca.transform.rotation);
+                    Write(InputTracking.GetLocalRotation(XRNode.LeftHand) * _vrca.transform.rotation);
+                    Write(InputTracking.GetLocalRotation(XRNode.RightHand) * _vrca.transform.rotation);
+                }
+                if (content.HasFlag(TelemetryFrameContents.AbsoluteScore))
+                {
+                    _writer.Write(_rawScore.Value);
+                    _writer.Write(_modifiedScore.Value);
+                    _rawScore = _modifiedScore = null;
+                }
+                if (content.HasFlag(TelemetryFrameContents.LeftHitDelta))
+                {
+                    _writer.Write((byte)_leftHitDelta);
+                    _leftHitDelta = 0;
+                }
+                if (content.HasFlag(TelemetryFrameContents.RightHitDelta))
+                {
+                    _writer.Write((byte)_rightHitDelta);
+                    _rightHitDelta = 0;
+                }
+                if (content.HasFlag(TelemetryFrameContents.LeftMissDelta))
+                {
+                    _writer.Write((byte)_leftMissDelta);
+                    _leftMissDelta = 0;
+                }
+                if (content.HasFlag(TelemetryFrameContents.RightMissDelta))
+                {
+                    _writer.Write((byte)_rightMissDelta);
+                    _rightMissDelta = 0;
+                }
+                _writer.Flush();
             }
 
+            _newData.Set();
 
 #if DEBUG_TEXT
             _text.text = $"BeatBrain ACTIVE: {Steamworks.SteamFriends.GetPersonaName()}\n{frames++:0,0} frames";

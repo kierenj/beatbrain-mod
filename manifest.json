@@ -2,13 +2,13 @@
   "$schema": "https://raw.githubusercontent.com/nike4613/ModSaber-MetadataFileSchema/master/Schema.json",
   "author": "kierenj",
   "description": [ "BeatBrain - records and uploads telemetry, and transmits various game events to FlashCast devices listening on the LAN" ],
-  "gameVersion": "1.6.1",
+  "gameVersion": "1.8.0",
   "id": "beatbrain",
   "name": "BeatBrain",
-  "version": "0.1.0-beta",
+  "version": "0.1.1-beta",
   "dependsOn": {
 	"BeatSaberMarkupLanguage": "^1.1.2",
-    "BS Utils": "^1.4.1"
+    "BS Utils": "^1.4.6"
 	},
   "conflictsWith": {},
   "features": [],

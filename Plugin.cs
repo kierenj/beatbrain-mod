@@ -8,39 +8,29 @@ using IPALogger = IPA.Logging.Logger;
 
 namespace BeatBrain.Mod
 {
-    public class Plugin : IBeatSaberPlugin
+    [Plugin(RuntimeOptions.SingleStartInit)]
+    public class Plugin
     {
         internal static Ref<PluginConfig> config;
         internal static IConfigProvider configProvider;
 
-        public void Init(IPALogger logger, [IPA.Config.Config.Prefer("json")] IConfigProvider cfgProvider)
+        [Init]
+        public Plugin(IPALogger logger, [IPA.Config.Config.Prefer("json")] IConfigProvider cfgProvider)
         {
             Logger.log = logger;
             configProvider = cfgProvider;
-
-            config = cfgProvider.MakeLink<PluginConfig>((p, v) =>
-            {
-                if (v.Value == null || v.Value.RegenerateConfig)
-                    p.Store(v.Value = new PluginConfig() { RegenerateConfig = false });
-                config = v;
-            });
         }
 
-        public void OnApplicationStart()
+        [OnStart]
+        public void OnStart()
         {
             BSEvents.OnLoad();
             BSEvents.menuSceneLoadedFresh += BSEvents_menuSceneLoadedFresh;
+            SceneManager.activeSceneChanged += OnActiveSceneChanged;
         }
 
+        [OnExit]
         public void OnApplicationQuit()
-        {
-        }
-
-        public void OnFixedUpdate()
-        {
-        }
-
-        public void OnUpdate()
         {
         }
 
@@ -56,14 +46,6 @@ namespace BeatBrain.Mod
                 new GameObject("FlashCast listener").AddComponent<FlashCaster>();
                 new GameObject("BeatBrain collector").AddComponent<TelemetryCollector>();
             }
-        }
-
-        public void OnSceneLoaded(Scene scene, LoadSceneMode sceneMode)
-        {
-        }
-
-        public void OnSceneUnloaded(Scene scene)
-        {
         }
     }   
 }
