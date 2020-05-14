@@ -238,9 +238,12 @@ namespace BeatBrain.Mod
                     Write(_vrca.transform.TransformPoint(InputTracking.GetLocalPosition(XRNode.Head)));
                     Write(_vrca.transform.TransformPoint(InputTracking.GetLocalPosition(XRNode.LeftHand)));
                     Write(_vrca.transform.TransformPoint(InputTracking.GetLocalPosition(XRNode.RightHand)));
-                    Write(InputTracking.GetLocalRotation(XRNode.Head) * _vrca.transform.rotation);
-                    Write(InputTracking.GetLocalRotation(XRNode.LeftHand) * _vrca.transform.rotation);
-                    Write(InputTracking.GetLocalRotation(XRNode.RightHand) * _vrca.transform.rotation);
+                    //Write(InputTracking.GetLocalRotation(XRNode.Head) * _vrca.transform.rotation);
+                    //Write(InputTracking.GetLocalRotation(XRNode.LeftHand) * _vrca.transform.rotation);
+                    //Write(InputTracking.GetLocalRotation(XRNode.RightHand) * _vrca.transform.rotation);
+                    Write(_vrca.transform.rotation * InputTracking.GetLocalRotation(XRNode.Head));
+                    Write(_vrca.transform.rotation * InputTracking.GetLocalRotation(XRNode.LeftHand));
+                    Write(_vrca.transform.rotation * InputTracking.GetLocalRotation(XRNode.RightHand));
                 }
                 if (content.HasFlag(TelemetryFrameContents.AbsoluteScore))
                 {
